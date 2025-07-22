@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\CartController;
+use App\Http\Controllers\Api\ProductController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -18,6 +19,9 @@ Route::prefix('api')->group(function () {
             'message' => 'Xin chào, kết nối từ Frontend đến Backend đã thành công!'
         ]);
     });
+
+    Route::get('/products', [ProductController::class, 'index']);
+    Route::get('/products/{product}', [ProductController::class, 'show']);
 
     // Các route cần xác thực
     Route::middleware('auth:sanctum')->group(function () {

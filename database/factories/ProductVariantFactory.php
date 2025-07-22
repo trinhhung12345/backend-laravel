@@ -15,7 +15,8 @@ class ProductVariantFactory extends Factory
             'color' => fake()->randomElement(['Trắng', 'Đen', 'Xám', 'Xanh Navy', 'Đỏ']),
             'price' => fake()->numberBetween(250, 800) * 1000, // Giá từ 250k đến 800k
             'stock_quantity' => fake()->numberBetween(0, 100), // Tồn kho
-            'image_url' => fake()->imageUrl(640, 480, 'clothes', true), // Tạo ảnh placeholder
+            'sold_count' => fake()->numberBetween(5, 500),
+            'image_url' => 'https://picsum.photos/seed/' . fake()->unique()->randomNumber() . '/600/800', // Tạo ảnh placeholder
         ];
     }
 }
