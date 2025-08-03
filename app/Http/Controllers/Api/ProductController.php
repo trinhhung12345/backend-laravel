@@ -10,38 +10,56 @@ use Illuminate\Http\Request;
 use App\Models\ProductVariant; // Import model ProductVariant
 use App\Http\Resources\ProductVariantResource; // Import Resource đã tạo
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $page = $request->input('page', 1);
-        $limit = $request->input('per_page', 12);
-        $sort = $request->input('sort', 'latest');
+        // http_build_query sẽ tự động tạo key cache duy nhất cho mọi tổ hợp filter
+        $cacheKey = 'products.filtered.' . http_build_query($request->all());
 
-        $cacheKey = "products.card.page.{$page}.limit.{$limit}.sort.{$sort}";
+        $products = Cache::remember($cacheKey, 60, function () use ($request) {
+            $query = Product::with('variants');
 
-        $products = Cache::remember($cacheKey, 60, function () use ($limit, $sort) {
-            // <<--- THAY ĐỔI: TRUY VẤN MODEL PRODUCT ---
-            // Query model Product, không phải ProductVariant
-            $query = Product::with('variants'); // Eager load 'variants' để resource có thể dùng
-
-            // Xử lý logic sắp xếp (chỉ ví dụ cho 'latest')
-            // Sắp xếp theo giá cần kỹ thuật join phức tạp hơn, sẽ làm sau
-            switch ($sort) {
-                // Bạn có thể thêm logic sắp xếp giá ở đây sau
-                // case 'price_asc':
-                // case 'price_desc':
-                case 'latest':
-                default:
-                    $query->latest(); // Sắp xếp theo ngày tạo sản phẩm
-                    break;
+            // --- LỌC THEO GIÁ (LOGIC MỚI) ---
+            // Chỉ lọc khi có cả min và max
+            if ($request->filled('min_price') && $request->filled('max_price')) {
+                $query->whereHas('variants', function ($q) use ($request) {
+                    $q->whereBetween('price', [$request->min_price, $request->max_price]);
+                });
             }
 
-            return $query->paginate($limit);
+            // --- LỌC THEO CATEGORY (LOGIC CŨ) ---
+            if ($request->has('categories')) {
+                $categorySlugs = explode(',', $request->input('categories'));
+                $query->whereHas('category', function ($q) use ($categorySlugs) {
+                    $q->whereIn('slug', $categorySlugs);
+                });
+            }
+
+            // --- LỌC THEO TÌM KIẾM (LOGIC CŨ) ---
+            if ($request->has('search')) {
+                $searchTerm = $request->input('search');
+                $query->where('name', 'like', "%{$searchTerm}%");
+            }
+
+            // --- SẮP XẾP (ĐƯỢC CẢI TIẾN) ---
+            $sort = $request->input('sort', 'latest');
+            if ($sort === 'price_asc' || $sort === 'price_desc') {
+                // Để sắp xếp theo giá của biến thể, chúng ta cần join
+                $direction = ($sort === 'price_asc') ? 'asc' : 'desc';
+                $query->select('products.*')
+                    ->join('product_variants', 'products.id', '=', 'product_variants.product_id')
+                    ->groupBy('products.id')
+                    ->orderBy(DB::raw('MIN(product_variants.price)'), $direction);
+            } else {
+                $query->latest(); // Sắp xếp theo created_at desc
+            }
+
+            return $query->paginate($request->input('per_page', 12));
         });
 
-        // <<--- THAY ĐỔI: SỬ DỤNG RESOURCE MỚI ---
         return ProductCardResource::collection($products);
     }
 
